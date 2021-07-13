@@ -5,30 +5,36 @@
     </p>
     <small class="app-item__meta__secondary">
       <Pds::Icon @type={{icon-for-component @build.component.name}} class="icon" />
-      <span>{{if (eq @model.status.state 1) 'Building' 'Built'}} with
+      <span>
+        {{if (eq @model.status.state 1) 'Building' 'Built'}} with
         <b>{{titleize @build.component.name}}</b>
-        {{#if (eq @build.status.state 1)}}
-          (Started {{date-format-distance-to-now @build.status.startTime.seconds }})
-        {{else}}
-          {{date-format-distance-to-now @build.status.completeTime.seconds }}
-        {{/if}}
       </span>
+
+      {{#let @build.pushedArtifact as |pushedArtifact|}}
+        {{#if pushedArtifact}}
+          <Pds::Icon
+            @type={{icon-for-component pushedArtifact.component.name}}
+            class="icon"
+            style="margin-left: 0.5rem"
+          />
+
+          <span>
+            {{#if (eq pushedArtifact.status.state 2)}}
+              Pushed to
+              <b>{{component-name pushedArtifact.component.name}}</b>
+            {{else if (eq pushedArtifact.status.state 3)}}
+              Failed to push to
+              <b>{{component-name pushedArtifact.component.name}}</b>
+            {{else}}
+              Pushing to
+              <b>{{component-name pushedArtifact.component.name}}</b>
+            {{/if}}
+          </span>
+        {{/if}}
+      {{/let}}
     </small>
   </LinkTo>
-  {{#if (eq @build.status.state 1)}}
-    <b class="badge">
-      <Pds::Icon @type="clock-outline" class="icon" />
-      <span>Building...</span>
-    </b>
-  {{else if (eq @build.status.state 2)}}
-    <b class="badge badge--success">
-      <Pds::Icon @type="check-plain" class="icon" />
-      <span>Built in {{date-format-distance @build.status.startTime.seconds @build.status.completeTime.seconds }}</span>
-    </b>
-  {{else if (eq @build.status.state 3)}}
-    <b class="badge badge--error">
-      <Pds::Icon @type="alert-triangle" class="icon" />
-      <span>Build failed</span>
-    </b>
-  {{/if}}
+  {{#let (or @build.pushedArtifact.status @build.status) as |status|}}
+    <OperationStatusIndicator @status={{status}} />
+  {{/let}}
 </li>
