@@ -3219,3 +3219,71 @@ message WaypointHclFmtRequest {
 message WaypointHclFmtResponse {
   bytes waypoint_hcl = 1;
 }
+
+service WaypointUI {
+  // List deployments for a given application.
+  rpc ListDeployments(UI.ListDeploymentsRequest) returns (UI.ListDeploymentsResponse);
+  // Get deployment by given reference.
+  rpc GetDeployment(UI.GetDeploymentRequest) returns (UI.DeploymentBundle);
+  // List releases for a given application.
+  rpc ListReleases(UI.ListReleasesRequest) returns (UI.ListReleasesResponse);
+  // Get release by given reference.
+  rpc GetRelease(UI.GetReleaseRequest)
+    returns (UI.ReleaseBundle);
+}
+
+message UI {
+
+  message ListDeploymentsRequest {
+    // Application that the deployments belongs to
+    Ref.Application application = 1;
+
+    // Workspace that the deployments belong to.
+    // If undefined, deployments from all workspaces will be listed.
+    Ref.Workspace workspace = 2;
+
+    // Order and pagination settings.
+    OperationOrder order = 3;
+  }
+
+  message ListDeploymentsResponse {
+    // The list of deployments with related messages prefetched.
+    repeated UI.DeploymentBundle deployments = 1;
+  }
+
+  message GetDeploymentRequest {
+    Ref.Operation ref = 1;
+  }
+
+  // A deployment packaged alongside prefetched related messages.
+  message DeploymentBundle {
+    // The deployment in question.
+    Deployment deployment = 1;
+
+    // The most recent status report generated for this deployment.
+    StatusReport latest_status_report = 2;
+  }
+
+  message ListReleasesRequest {
+    Ref.Operation ref = 1;
+  }
+
+  message ListReleasesResponse {
+    // The list of releases with related messages prefetched.
+    repeated UI.ReleaseBundle releases = 1;
+  }
+
+  message GetReleaseRequest {
+    Ref.Operation ref = 1;
+  }
+
+  // A release packaged alongside prefetched related messages.
+  message ReleaseBundle {
+    // The release in question.
+    Release release = 1;
+
+    // The most recent status report generated for this release.
+    StatusReport latest_status_report = 2;
+  }
+
+}
