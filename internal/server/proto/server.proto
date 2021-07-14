@@ -721,6 +721,9 @@ message OperationOrder {
   // Limit the number of results
   uint32 limit = 4;
 
+  // Offset from which to start listing results
+  uint32 offset = 5;
+
   enum Order {
     UNSET = 0;
     START_TIME = 1;
