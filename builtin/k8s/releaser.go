@@ -3,6 +3,7 @@ package k8s
 import (
 	"context"
 	"fmt"
+	networkingv1 "k8s.io/api/networking/v1"
 	"strconv"
 	"strings"
 	"time"
@@ -208,7 +209,85 @@ func (r *Releaser) Release(
 	step.Update("Service is ready!")
 	step.Done()
 
-	if r.config.LoadBalancer {
+	// Ingress
+	var ingress *networkingv1.Ingress
+	if r.config.Ingress {
+		ingressclient := clientset.NetworkingV1().Ingresses(ns)
+
+		// Determine if we have a deployment that we manage already
+		createIngress := false
+		ingress, err = ingressclient.Get(ctx, result.ServiceName, metav1.GetOptions{})
+		if errors.IsNotFound(err) {
+			ingress = result.newIngress(result.ServiceName)
+			createIngress = true
+			err = nil
+		}
+		if err != nil {
+			return nil, err
+		}
+
+		ingress.Annotations = r.config.Annotations
+		ingress.Spec.Rules = []networkingv1.IngressRule{
+			{
+				Host: r.config.IngressHost,
+			},
+		}
+		ingress.Spec.DefaultBackend = &networkingv1.IngressBackend{
+			Service: &networkingv1.IngressServiceBackend{
+				Name: service.Name,
+				Port: networkingv1.ServiceBackendPort{
+					Number: int32(r.config.Port),
+				},
+			},
+		}
+
+		// Create/update ingress
+		if createIngress {
+			step.Update("Creating ingress...")
+			ingress, err = ingressclient.Create(ctx, ingress, metav1.CreateOptions{})
+		} else {
+			step.Update("Updating ingress...")
+			ingress, err = ingressclient.Update(ctx, ingress, metav1.UpdateOptions{})
+		}
+		if err != nil {
+			return nil, err
+		}
+
+		step.Done()
+		step = sg.Add("Waiting for ingress to become ready...")
+
+		// Wait on the IP
+		err = wait.PollImmediate(2*time.Second, 10*time.Minute, func() (bool, error) {
+			ingress, err = ingressclient.Get(ctx, ingress.Name, metav1.GetOptions{})
+			if err != nil {
+				return false, err
+			}
+
+			return len(ingress.Status.LoadBalancer.Ingress)> 0, nil
+		})
+		if err != nil {
+			return nil, err
+		}
+
+		step.Update("Ingress is ready!")
+		step.Done()
+	}
+
+	switch {
+	case r.config.Ingress:
+		proto := "http"
+		// detect if TLS is configured
+		// TODO: TLS may be enabled at the ingress controller level (e.g. nginx ingress using ACM certificate)
+		for _, tls := range ingress.Spec.TLS {
+			for _, host := range tls.Hosts {
+				if host == r.config.IngressHost {
+					proto = "https"
+				}
+			}
+		}
+		result.Url = proto + "://" + r.config.IngressHost
+
+	case r.config.LoadBalancer:
 		ingress := service.Status.LoadBalancer.Ingress[0]
 		result.Url = "http://" + ingress.IP
 		if ingress.Hostname != "" {
@@ -218,7 +297,7 @@ func (r *Releaser) Release(
 		if service.Spec.Ports[0].Port != 80 {
 			result.Url = fmt.Sprintf("%s:%d", result.Url, service.Spec.Ports[0].Port)
 		}
-	} else if service.Spec.Ports[0].NodePort > 0 {
+	case service.Spec.Ports[0].NodePort > 0:
 		nodeclient := clientset.CoreV1().Nodes()
 		nodes, err := nodeclient.List(ctx, metav1.ListOptions{})
 		if err != nil {
@@ -227,7 +306,7 @@ func (r *Releaser) Release(
 
 		nodeIP := nodes.Items[0].Status.Addresses[0].Address
 		result.Url = fmt.Sprintf("http://%s:%d", nodeIP, service.Spec.Ports[0].NodePort)
-	} else {
+	default:
 		result.Url = fmt.Sprintf("http://%s:%d", service.Spec.ClusterIP, service.Spec.Ports[0].Port)
 	}
 
@@ -369,6 +448,13 @@ type ReleaserConfig struct {
 	// Context specifies the kube context to use.
 	Context string `hcl:"context,optional"`
 
+	// Ingress sets whether or not Waypoint creates an Ingress
+	// resources for the release
+	Ingress bool `hcl:"ingress,optional"`
+
+	// IngressHost is the fully qualified domain name of a network host, as defined by RFC 3986.
+	IngressHost string `hcl:"ingress_host,optional"`
+
 	// Load Balancer sets whether or not the service will be a load
 	// balancer type service
 	LoadBalancer bool `hcl:"load_balancer,optional"`
@@ -410,6 +496,14 @@ func (r *Releaser) Documentation() (*docs.Documentation, error) {
 	doc.SetField(
 		"context",
 		"the kubectl context to use, as defined in the kubeconfig file",
+	)
+
+	doc.SetField(
+		"ingress",
+		"indicates if a Kubernetes Ingress should be created",
+		docs.Summary(
+			"should an Ingress be created for the release",
+		),
 	)
 
 	doc.SetField(
