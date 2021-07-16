@@ -235,7 +235,12 @@ func (r *Releaser) Release(
 		ingress.Spec.Backend = &networkingv1beta1.IngressBackend{
 			ServiceName: service.Name,
 			ServicePort: intstr.FromInt(int(service.Spec.Ports[0].Port)),
-
+		}
+		ingress.Spec.TLS = []networkingv1beta1.IngressTLS{
+			{
+				Hosts: []string{r.config.IngressHost},
+				SecretName: fmt.Sprintf("tls-%s", result.ServiceName),
+			},
 		}
 
 		// Create/update ingress
