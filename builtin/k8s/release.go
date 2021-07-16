@@ -2,7 +2,7 @@ package k8s
 
 import (
 	corev1 "k8s.io/api/core/v1"
-	networkingv1 "k8s.io/api/networking/v1"
+	networkingv1beta1 "k8s.io/api/networking/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/hashicorp/waypoint-plugin-sdk/component"
@@ -10,8 +10,8 @@ import (
 
 // newService returns the basic structure for a new ingress.
 // This isn't ready to deploy right away.
-func (*Release) newIngress(name string) *networkingv1.Ingress {
-	return &networkingv1.Ingress{
+func (*Release) newIngress(name string) *networkingv1beta1.Ingress {
+	return &networkingv1beta1.Ingress{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "v1",
 			Kind:       "Ingress",

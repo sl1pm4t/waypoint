@@ -3,7 +3,6 @@ package k8s
 import (
 	"context"
 	"fmt"
-	networkingv1 "k8s.io/api/networking/v1"
 	"strconv"
 	"strings"
 	"time"
@@ -12,6 +11,7 @@ import (
 	"github.com/hashicorp/go-hclog"
 	"github.com/hashicorp/waypoint/internal/clierrors"
 	corev1 "k8s.io/api/core/v1"
+	networkingv1beta1 "k8s.io/api/networking/v1beta1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -210,11 +210,11 @@ func (r *Releaser) Release(
 	step.Done()
 
 	// Ingress
-	var ingress *networkingv1.Ingress
+	var ingress *networkingv1beta1.Ingress
 	if r.config.Ingress {
-		ingressclient := clientset.NetworkingV1().Ingresses(ns)
+		ingressclient := clientset.NetworkingV1beta1().Ingresses(ns)
 
-		// Determine if we have a deployment that we manage already
+		// Determine if we have an ingress that we manage already
 		createIngress := false
 		ingress, err = ingressclient.Get(ctx, result.ServiceName, metav1.GetOptions{})
 		if errors.IsNotFound(err) {
@@ -227,18 +227,15 @@ func (r *Releaser) Release(
 		}
 
 		ingress.Annotations = r.config.Annotations
-		ingress.Spec.Rules = []networkingv1.IngressRule{
+		ingress.Spec.Rules = []networkingv1beta1.IngressRule{
 			{
 				Host: r.config.IngressHost,
 			},
 		}
-		ingress.Spec.DefaultBackend = &networkingv1.IngressBackend{
-			Service: &networkingv1.IngressServiceBackend{
-				Name: service.Name,
-				Port: networkingv1.ServiceBackendPort{
-					Number: int32(r.config.Port),
-				},
-			},
+		ingress.Spec.Backend = &networkingv1beta1.IngressBackend{
+			ServiceName: service.Name,
+			ServicePort: intstr.FromInt(int(service.Spec.Ports[0].Port)),
+
 		}
 
 		// Create/update ingress
